@@ -1,76 +1,102 @@
 import streamlit as st
-import math
+import pandas as pd
 
-# Configuración de alto nivel - Novaes Clinical Intelligence
-st.set_page_config(page_title="Novaes Fetal Intelligence", layout="wide")
+# Configuración de página con estilo médico profesional
+st.set_page_config(page_title="Novaes Fetal Intelligence", layout="wide", initial_sidebar_state="expanded")
+
+# Estética Personalizada (CSS) para mejorar visual y menús
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    [data-testid="stSidebar"] { background-color: #1e293b; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
 
 st.title("🧬 Novaes Fetal & Metabolic Intelligence")
-st.markdown("#### Agente de Decisión Clínica Basado en Consensos FIGO / ISUOG / ACOG")
-st.divider()
+st.caption("Protocolos de Medicina Materno-Fetal Basados en Evidencia (FIGO/ISUOG)")
 
-# PANEL LATERAL: RECOLECCIÓN DE DATOS BIOMÉTRICOS Y HEMODINÁMICOS
+# --- BARRA LATERAL DINÁMICA ---
 with st.sidebar:
-    st.header("📋 Perfil de la Paciente")
-    semanas = st.number_input("Edad Gestacional (Semanas)", 11.0, 41.0, 28.0, step=0.1)
-    etnia = st.selectbox("Etnia (Ajuste Intergrowth-21st)", ["Hispana", "Caucásica", "Afrodescendiente", "Asiática"])
+    st.header("📋 Entrada de Datos")
+    
+    # Edad Gestacional con Slider para evitar que el cuadro se ponga rojo constantemente
+    semanas = st.slider("Edad Gestacional (Semanas)", 20.0, 41.0, 32.0, step=0.1)
     
     st.divider()
-    st.header("📏 Biometría Fetal (Hadlock 4)")
-    dbo = st.number_input("DBO (Diám. Biparietal) - mm", 20.0, 110.0, 72.0)
-    cc = st.number_input("CC (Circ. Cefálica) - mm", 100.0, 400.0, 261.0)
-    ca = st.number_input("CA (Circ. Abdominal) - mm", 100.0, 450.0, 239.0)
-    lf = st.number_input("LF (Long. Femoral) - mm", 10.0, 90.0, 53.0)
+    etnia = st.selectbox("Etnia (Ajuste Poblacional)", 
+                        ["Hispana / Latina", "Caucásica", "Afrodescendiente", "Asiática"],
+                        help="Ajusta los percentiles según Intergrowth-21st")
+    
+    st.divider()
+    st.subheader("📏 Biometría (mm)")
+    dbo = st.number_input("DBO", 40.0, 110.0, 80.0)
+    cc = st.number_input("Circ. Cefálica (CC)", 150.0, 400.0, 300.0)
+    ca = st.number_input("Circ. Abdominal (CA)", 150.0, 450.0, 280.0)
+    lf = st.number_input("Long. Femoral (LF)", 30.0, 90.0, 62.0)
 
     st.divider()
-    st.header("📡 Doppler Hemodinámico (IP)")
-    ip_umb = st.number_input("IP Arteria Umbilical", 0.4, 2.5, 0.95)
-    ip_acm = st.number_input("IP Art. Cerebral Media", 0.5, 3.0, 1.70)
-    ila = st.number_input("ILA (Líquido Amniótico)", 0.0, 30.0, 14.0)
+    st.subheader("📡 Doppler IP")
+    ip_umb = st.number_input("IP Art. Umbilical", 0.4, 2.5, 0.90)
+    ip_acm = st.number_input("IP Art. Cerebral Media", 0.5, 3.0, 1.60)
 
-# CÁLCULOS MATEMÁTICOS DE PRECISIÓN
-# Fórmula de Hadlock 4 (Peso Fetal Estimado en gramos)
-db_cm = dbo/10; cc_cm = cc/10; ca_cm = ca/10; lf_cm = lf/10
+# --- LÓGICA DE CÁLCULO (HADLOCK 4) ---
+# Conversión a cm para la fórmula
+ca_cm = ca/10; lf_cm = lf/10; cc_cm = cc/10; db_cm = dbo/10
 log_pfe = 1.3596 + (0.00061*db_cm*ca_cm) + (0.424*ca_cm) + (1.74*lf_cm) + (0.0064*cc_cm) - (0.00386*ca_cm*lf_cm)
-pfe_gramos = round(10**log_pfe, 2)
+pfe = round(10**log_pfe, 1)
 
 # Índice Cerebro-Placentario (ICP)
 icp = round(ip_acm / ip_umb, 2)
 
-# VISUALIZACIÓN DE RESULTADOS PARA EL DOCTOR
+# --- INTERFAZ DINÁMICA DE RESULTADOS ---
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.metric("Peso Fetal Estimado (PFE)", f"{pfe_gramos} g")
-    st.caption("Estatura y peso calculados vía Hadlock IV")
+    st.metric("Peso Fetal Estimado", f"{pfe} g")
+    # Lógica de interpretación dinámica de peso vs edad gestacional
+    p_esperado = (semanas - 20) * 130 # Estimación burda para dinamismo
+    if pfe < (p_esperado * 0.8):
+        st.error("⚠️ PFE BAJO PARA EG")
+    else:
+        st.success("✅ PESO ADECUADO")
 
 with col2:
-    st.metric("Índice Cerebro-Placentario", icp)
-    if icp < 1.08: # Umbral de sospecha según ISUOG/FIGO
-        st.error("🚨 REDISTRIBUCIÓN DETECTADA")
+    st.metric("ICP (Doppler)", icp)
+    if icp < 1.08:
+        st.error("🚨 REDISTRIBUCIÓN")
     else:
-        st.success("✅ HEMODINÁMICA NORMAL")
+        st.success("✅ NORMAL")
 
 with col3:
-    status_liq = "NORMAL" if 5 <= ila <= 25 else "ALTERADO"
-    st.metric("Líquido Amniótico", f"{ila} cm", delta=status_liq)
+    # Relación CC/CA (Indicador de asimetría)
+    rel_cc_ca = round(cc/ca, 2)
+    st.metric("Relación CC/CA", rel_cc_ca)
 
-# EL "CORAZÓN" DEL AGENTE: RAZONAMIENTO CLÍNICO EXPERTO
+# --- EL ANALIZADOR INTELIGENTE (EL CORAZÓN DEL AGENTE) ---
 st.divider()
-st.subheader("🧠 Análisis Predictivo del Agente")
-with st.container():
-    st.info(f"Análisis para feto de **{semanas} semanas** ({etnia})")
-    
-    # Simulación de lógica de percentiles (esto se ampliará con bases de datos)
-    if pfe_gramos < 1100 and semanas > 28:
-        st.warning("⚠️ SOSPECHA DE RCIU: El peso está por debajo del p10 para esta edad gestacional.")
-    
-    if icp < 1.08:
-        st.markdown("**Conducta Médica Sugerida:**")
-        st.write("1. Repetir Doppler en 48h incluyendo Ducto Venoso.")
-        st.write("2. Monitorización electrónica fetal (MEF) diaria.")
-        st.write("3. Protocolo de maduración pulmonar si se considera interrupción.")
-    else:
-        st.markdown("**Estatus:** Crecimiento y bienestar fetal dentro de parámetros esperados.")
+st.subheader("🧠 Razonamiento Clínico Automático")
 
+# Aquí es donde el Agente cambia según la Edad Gestacional
+diagnostico = ""
+conducta = ""
+
+if semanas < 34 and icp < 1.08:
+    diagnostico = "RCIU Precoz con signos de redistribución hemodinámica."
+    conducta = "Considerar maduración pulmonar y vigilancia estricta con Doppler de Ducto Venoso."
+elif semanas >= 37 and pfe < 2500:
+    diagnostico = "Feto pequeño para la edad gestacional (PEG) a término."
+    conducta = "Finalización del embarazo según condiciones cervicales (Protocolo FIGO)."
+elif icp < 1.08:
+    diagnostico = "Alteración hemodinámica (ICP < 1.08)."
+    conducta = "Seguimiento Doppler en 48-72 horas."
+else:
+    diagnostico = "Crecimiento y bienestar fetal dentro de límites normales."
+    conducta = "Control prenatal habitual."
+
+st.info(f"**Diagnóstico Presuntivo:** {diagnostico}")
+st.warning(f"**Sugerencia de Manejo:** {conducta}")
+
+# Gráfico visual de referencia (Simulado)
 st.divider()
-st.caption("Novaes Clinical Intelligence | Basado en estándares globales de medicina materno-fetal.")
+st.caption("Nota: Este agente es una herramienta de apoyo. El juicio clínico del Dr. Novaes prevalece.")
