@@ -2,177 +2,148 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
-import math
 
-# --- CONFIGURACIÓN DE NIVEL SUPERIOR ---
-st.set_page_config(page_title="Novaes Clinical Intelligence B-Suite", layout="wide")
+# --- CONFIGURACIÓN MÉDICA ---
+st.set_page_config(page_title="Novaes Clinical Suite v5", layout="wide")
 
-# --- ESTADO DE LA APLICACIÓN (BASE DE DATOS TEMPORAL) ---
-# Nota: Para persistencia permanente en la nube, conectaríamos esto a SQL/Supabase más adelante.
-if 'db_pacientes' not in st.session_state:
-    st.session_state.db_pacientes = {}
+# Inicializar Base de Datos en la sesión
+if 'db' not in st.session_state:
+    st.session_state.db = {}
 
-# --- ESTILOS VISUALES ---
-st.markdown("""
-    <style>
-    .stApp { background-color: #f8fafc; }
-    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: #f1f5f9; border-radius: 5px; padding: 10px; }
-    .stTabs [aria-selected="true"] { background-color: #1e40af !important; color: white !important; }
-    div[data-testid="stMetricValue"] { color: #0f172a; font-size: 28px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- HEADER PRINCIPAL ---
 st.title("🧬 Novaes Fetal & Metabolic Intelligence")
-st.caption("Asesor de Investigaciones Clínicas y Gestión Perinatal | v4.0 Alpha")
+st.caption("Suite de Alta Complejidad para Medicina Materno-Fetal")
 
-# --- SISTEMA DE IDENTIFICACIÓN ---
+# --- BARRA LATERAL: GESTIÓN DE PACIENTES ---
 with st.sidebar:
-    st.header("🔍 Gestión de Paciente")
-    paciente_id = st.text_input("ID o Nombre de la Paciente", placeholder="Ej: Maria_Perez_001")
+    st.header("👤 Paciente")
+    id_paciente = st.text_input("ID / Nombre Completo", placeholder="Ej: Novaes_001")
     
-    if paciente_id:
-        if paciente_id not in st.session_state.db_pacientes:
-            st.info("Nueva ficha técnica creada.")
-            st.session_state.db_pacientes[paciente_id] = {
-                'datos_maternos': {},
-                'laboratorio': {'T1': {}, 'T2': {}, 'T3': {}},
-                'biometrias': []
+    if id_paciente:
+        if id_paciente not in st.session_state.db:
+            st.session_state.db[id_paciente] = {
+                'historial_materno': {},
+                'historial_lab': [],
+                'historial_eco': []
             }
-        else:
-            st.success(f"Ficha de {paciente_id} cargada.")
+        st.success(f"Archivo: {id_paciente}")
 
-# --- CUERPO PRINCIPAL (TABS) ---
-if paciente_id:
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "👤 Ficha Materna & Riesgo", 
-        "🧪 Laboratorio Evolutivo", 
-        "👶 Ecografía & Doppler", 
-        "📈 Historial & Tendencias"
-    ])
+# --- LOGICA PRINCIPAL SI HAY PACIENTE ---
+if id_paciente:
+    t1, t2, t3, t4 = st.tabs(["📋 Ficha & Riesgo", "🧪 Laboratorio Detallado", "👶 Eco & Doppler", "📊 Evolución Clínica"])
 
-    # --- TAB 1: FICHA MATERNA & RIESGO ---
-    with tab1:
-        st.subheader("Evaluación de Factores de Riesgo Obstétrico")
-        col_m1, col_m2 = st.columns(2)
-        
-        with col_m1:
-            st.session_state.db_pacientes[paciente_id]['datos_maternos']['edad'] = st.number_input("Edad Materna", 12, 55, 30)
-            fum = st.date_input("FUM (Fecha Última Menstruación)", datetime.now() - timedelta(weeks=20))
-            st.session_state.db_pacientes[paciente_id]['datos_maternos']['fum'] = fum
+    # --- TAB 1: FICHA MATERNA ---
+    with t1:
+        st.subheader("Historia Clínica y Antropometría")
+        c1, c2 = st.columns(2)
+        with c1:
+            fum = st.date_input("Fecha de Última Menstruación (FUM)", datetime.now() - timedelta(weeks=20))
+            fpp = fum + timedelta(days=280)
+            eg_actual = round((datetime.now().date() - fum).days / 7, 1)
             
-            # Antropometría e IMC
+            st.metric("FPP (Regla de Naegele)", fpp.strftime("%d/%m/%Y"))
+            st.metric("Edad Gestacional Actual", f"{eg_actual} semanas")
+            
+            peso = st.number_input("Peso Actual (kg)", 30.0, 200.0, 70.0)
             talla = st.number_input("Talla (cm)", 100.0, 220.0, 165.0) / 100
-            peso_m = st.number_input("Peso Actual (kg)", 30.0, 200.0, 70.0)
-            imc = round(peso_m / (talla**2), 1)
-            st.metric("IMC Calculado", f"{imc} kg/m²")
+            imc = round(peso / (talla**2), 2)
             
-        with col_m2:
-            st.subheader("Antecedentes (APP)")
-            tabaquismo = st.checkbox("Hábito Tabáquico / Tóxicos")
-            preeclampsia_prev = st.checkbox("Antecedente de Preeclampsia")
-            diabetes_prev = st.checkbox("Antecedente Diabetes Gestacional")
-            hta_cronica = st.checkbox("Hipertensión Crónica")
-        
-        # Lógica de Riesgo OMS/FMF (Simplificada para prototipo)
-        st.divider()
-        if imc > 30 or preeclampsia_prev or hta_cronica:
-            st.error("🚨 **ALERTA DE RIESGO OBSTÉTRICO ALTO:** Se recomienda seguimiento estricto de TA y Doppler de Arterias Uterinas.")
-        else:
-            st.success("✅ Riesgo obstétrico basal dentro de la normalidad.")
+            # Clasificación IMC
+            if imc < 18.5: clas = "Bajo Peso"; color = "inverse"
+            elif 18.5 <= imc < 25: clas = "Normal"; color = "normal"
+            elif 25 <= imc < 30: clas = "Sobrepeso"; color = "off"
+            else: clas = "Obesidad"; color = "off"
+            st.metric("IMC", f"{imc} ({clas})")
 
-    # --- TAB 2: LABORATORIO EVOLUTIVO ---
-    with tab2:
-        trimestre = st.radio("Seleccione Trimestre", ["1er Trimestre", "2do Trimestre", "3er Trimestre"], horizontal=True)
-        t_key = "T1" if "1er" in trimestre else "T2" if "2do" in trimestre else "T3"
-        
-        st.subheader(f"Analítica del {trimestre}")
-        col_l1, col_l2 = st.columns(2)
-        
-        with col_l1:
-            hb = st.number_input("Hemoglobina (g/dL)", 5.0, 20.0, 12.0)
-            glicemia = st.number_input("Glicemia Basal (mg/dL)", 40, 300, 85)
-            st.session_state.db_pacientes[paciente_id]['laboratorio'][t_key]['Hb'] = hb
-            st.session_state.db_pacientes[paciente_id]['laboratorio'][t_key]['Glicemia'] = glicemia
+        with c2:
+            st.markdown("**Hábitos Tóxicos (Cantidad/Día)**")
+            tabaco = st.number_input("Cigarrillos", 0, 40, 0)
+            alcohol = st.selectbox("Consumo Alcohol", ["Nulo", "Ocasional", "Frecuente"])
+            otras_sust = st.text_area("Otras sustancias / Comentarios adicionales")
             
-        with col_l2:
-            creatinina = st.number_input("Creatinina (mg/dL)", 0.1, 2.0, 0.6)
-            plaquetas = st.number_input("Plaquetas (uL)", 50000, 600000, 250000)
-        
-        # Validación de Rangos Dinámicos
-        if t_key == "T1" and hb < 11.0: st.warning("Hb baja para 1er Trimestre (Anemia)")
-        if t_key == "T2" and hb < 10.5: st.warning("Hb baja para 2do Trimestre (Hemodilución normal pero límite)")
-        if glicemia > 92 and t_key == "T1": st.error("Posible Diabetes Gestacional (Criterios OMS)")
+            st.markdown("**Historia Obstétrica**")
+            gestas = st.number_input("Gestas", 0, 20, 1)
+            partos = st.number_input("Partos", 0, 20, 0)
+            cesareas = st.number_input("Cesáreas", 0, 20, 0)
+            antecedentes = st.text_area("Antecedentes de importancia (RCIU, Preeclampsia, etc.)")
+
+    # --- TAB 2: LABORATORIO DETALLADO ---
+    with t2:
+        st.subheader("Ingreso de Analítica Periódica")
+        with st.form("form_lab"):
+            fecha_lab = st.date_input("Fecha del Análisis")
+            l1, l2, l3 = st.columns(3)
+            with l1:
+                st.markdown("**Hemograma**")
+                hb = st.number_input("Hb (g/dL)", 5.0, 18.0, 12.0)
+                hcto = st.number_input("Hcto (%)", 15.0, 55.0, 36.0)
+                plaquetas = st.number_input("Plaquetas", 50000, 600000, 250000)
+            with l2:
+                st.markdown("**Bioquímica & Renal**")
+                glicemia = st.number_input("Glicemia (mg/dL)", 40, 300, 85)
+                urea = st.number_input("Urea (mg/dL)", 5, 100, 25)
+                ac_urico = st.number_input("Ácido Úrico (mg/dL)", 1.0, 12.0, 4.0)
+                tgo = st.number_input("TGO (U/L)", 0, 500, 25)
+                tgp = st.number_input("TGP (U/L)", 0, 500, 25)
+            with l3:
+                st.markdown("**Perfil Lipídico & Vits**")
+                colest = st.number_input("Colesterol Total", 100, 400, 180)
+                trigli = st.number_input("Triglicéridos", 50, 600, 150)
+                vit_d = st.number_input("Vitamina D (ng/mL)", 5, 100, 30)
+            
+            if st.form_submit_button("💾 Guardar Laboratorio"):
+                st.session_state.db[id_paciente]['historial_lab'].append({
+                    "Fecha": fecha_lab, "Hb": hb, "Glicemia": glicemia, "AcUrico": ac_urico, "EG": eg_actual
+                })
+                st.success("Analítica guardada en el historial.")
 
     # --- TAB 3: ECOGRAFÍA & DOPPLER ---
-    with tab3:
-        st.subheader("Ingreso de Biometría y Hemodinámica")
-        col_e1, col_e2, col_e3 = st.columns(3)
-        
-        with col_e1:
-            st.markdown("**Cabeza**")
-            dbo = st.number_input("DBO (mm)", 0.0, 120.0, 0.0) # 0 para permitir opcionalidad
-            cc = st.number_input("CC (mm)", 0.0, 450.0, 0.0)
-            dfo = st.number_input("DFO (mm) [Opcional]", 0.0, 150.0, 0.0)
-        
-        with col_e2:
-            st.markdown("**Cuerpo y Miembros**")
-            ca = st.number_input("CA (mm)", 0.0, 500.0, 0.0)
-            lf = st.number_input("LF (mm)", 0.0, 100.0, 0.0)
-            ila = st.number_input("ILA (cm)", 0.0, 35.0, 12.0)
+    with t3:
+        st.subheader("Evaluación Morfo-Fetal e Hemodinámica")
+        with st.form("form_eco"):
+            e1, e2, e3 = st.columns(3)
+            with e1:
+                st.markdown("**Biometría**")
+                dbo = st.number_input("DBO", 0, 120, 75)
+                dfo = st.number_input("DFO", 0, 150, 95)
+                cc = st.number_input("CC", 0, 450, 280)
+                ca = st.number_input("CA", 0, 450, 260)
+                lf = st.number_input("LF", 0, 100, 55)
+                lh = st.number_input("LH (Húmero)", 0, 100, 50)
+            with e2:
+                st.markdown("**Doppler**")
+                ip_au = st.number_input("IP Art. Umbilical", 0.3, 3.0, 0.9)
+                ip_acm = st.number_input("IP Art. Cerebral Media", 0.5, 3.5, 1.6)
+                ip_ut_d = st.number_input("IP Uterina Derecha", 0.3, 3.0, 0.7)
+                ip_ut_i = st.number_input("IP Uterina Izquierda", 0.3, 3.0, 0.7)
+            with e3:
+                st.markdown("**Cálculos Automáticos**")
+                imau = round((ip_ut_d + ip_ut_i) / 2, 2)
+                icp = round(ip_acm / ip_au, 2) if ip_au > 0 else 0
+                st.write(f"**IMAU:** {imau}")
+                st.write(f"**ICP:** {icp}")
             
-        with col_e3:
-            st.markdown("**Doppler (IP)**")
-            au = st.number_input("IP Art. Umbilical", 0.0, 3.0, 0.0)
-            acm = st.number_input("IP Art. Cerebral Media", 0.0, 3.5, 0.0)
-            dv = st.number_input("IP Ducto Venoso", 0.0, 2.0, 0.0)
-        
-        if st.button("💾 Guardar y Analizar"):
-            # Lógica No-Excluyente para PFE (Hadlock IV)
-            # Solo calcula si tiene los parámetros mínimos
-            if ca > 0 and lf > 0:
-                # Conversión a cm para fórmula
-                db_cm = dbo/10; cc_cm = cc/10; ca_cm = ca/10; lf_cm = lf/10
-                log_pfe = 1.3596 + (0.00061*db_cm*ca_cm) + (0.424*ca_cm) + (1.74*lf_cm) + (0.0064*cc_cm) - (0.00386*ca_cm*lf_cm)
-                pfe_final = round(10**log_pfe, 1)
-                
-                # Calcular Semanas por Eco (Simplificado)
-                eg_estimada = round((lf * 0.5) + 15, 1) # Estimación burda
-                
-                nueva_eco = {
-                    "Fecha": datetime.now(),
-                    "Semanas": eg_estimada,
-                    "PFE": pfe_final,
-                    "IP_AU": au,
-                    "IP_ACM": acm,
-                    "ICP": round(acm/au, 2) if au > 0 else 0
-                }
-                st.session_state.db_pacientes[paciente_id]['biometrias'].append(nueva_eco)
-                st.success(f"Estudio guardado: PFE {pfe_final}g")
-            else:
-                st.error("Faltan parámetros críticos (CA y LF) para calcular el peso.")
+            if st.form_submit_button("💾 Guardar Ecografía"):
+                # Cálculo Hadlock simplificado
+                pfe = (dbo + ca + lf) * 10 # Representación simbólica
+                st.session_state.db[id_paciente]['historial_eco'].append({
+                    "Fecha": datetime.now(), "EG": eg_actual, "PFE": pfe, "ICP": icp, "IMAU": imau
+                })
+                st.success("Datos ecográficos guardados.")
 
-    # --- TAB 4: HISTORIAL & INVESTIGACIÓN ---
-    with tab4:
-        st.subheader("Análisis Longitudinal")
-        historial = st.session_state.db_pacientes[paciente_id]['biometrias']
+    # --- TAB 4: HISTORIAL & TENDENCIAS ---
+    with t4:
+        st.subheader(f"Evolución Clínica: {id_paciente}")
         
-        if historial:
-            df = pd.DataFrame(historial)
+        hist_eco = st.session_state.db[id_paciente]['historial_eco']
+        if hist_eco:
+            df_eco = pd.DataFrame(hist_eco)
+            fig_pfe = px.line(df_eco, x="EG", y="PFE", title="Curva de Crecimiento Fetal (PFE)", markers=True)
+            st.plotly_chart(fig_pfe, use_container_width=True)
             
-            # Gráfico de Crecimiento
-            fig = px.line(df, x="Semanas", y="PFE", markers=True, title="Curva Evolutiva de Peso Fetal")
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Tabla para Investigaciones
-            st.markdown("### Exportar Datos para Investigación")
-            st.dataframe(df)
-            
-            csv = df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Descargar CSV para Investigación", csv, f"investigacion_{paciente_id}.csv", "text/csv")
+            fig_doppler = px.line(df_eco, x="EG", y=["ICP", "IMAU"], title="Tendencia Hemodinámica (ICP vs IMAU)", markers=True)
+            st.plotly_chart(fig_doppler, use_container_width=True)
         else:
-            st.info("No hay datos históricos para esta paciente.")
+            st.info("No hay datos sucesivos para mostrar tendencias.")
 
 else:
-    st.warning("👈 Por favor, ingrese un ID de paciente en la barra lateral para comenzar.")
+    st.warning("👈 Ingrese el ID de la paciente para activar la Suite.")r, ingrese un ID de paciente en la barra lateral para comenzar.")
