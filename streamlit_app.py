@@ -4,46 +4,38 @@ import plotly.express as px
 from datetime import datetime, timedelta
 from scipy.stats import norm
 
-# --- CONFIGURACIÓN DE LA SUITE NOVAES v10 ---
-st.set_page_config(page_title="Novaes Clinical Suite", layout="wide")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="Novaes Research Suite", layout="wide")
 
 if 'db' not in st.session_state:
     st.session_state.db = {}
 
-# --- MOTOR DE PERCENTILES ---
-def calcular_percentil(valor, media, de):
+# Motor de Percentiles (Basado en medias gestacionales)
+def calcular_p(v, m, de):
     if de <= 0: return 50
-    z = (valor - media) / de
-    return round(norm.cdf(z) * 100, 1)
+    z = (v - m) / de
+    p = round(norm.cdf(z) * 100, 1)
+    return p
 
-def color_estado(p, invertido=False):
-    if not invertido:
-        if p < 10 or p > 90: return "inverse"
-        return "normal"
-    else:
-        if p > 95: return "inverse"
-        return "normal"
+st.title("🧬 Novaes Clinical Intelligence v11")
+st.caption("Investigación Materno-Fetal: Biometría, Doppler de Precisión y Laboratorio")
 
-st.title("🧬 Novaes Clinical Intelligence")
-st.caption("Módulo Avanzado: Biometría, Doppler con Percentiles y Laboratorio")
-
-# --- SIDEBAR ---
+# --- GESTIÓN DE PACIENTE ---
 with st.sidebar:
-    st.header("🔍 Paciente")
-    id_p = st.text_input("ID Paciente", placeholder="Ej: 1010")
+    st.header("👤 Paciente")
+    id_p = st.text_input("ID / Nombre", placeholder="ID de seguimiento...")
     if id_p:
         if id_p not in st.session_state.db:
-            st.session_state.db[id_p] = {'materno': {}, 'lab': [], 'eco': []}
-        st.success(f"Expediente Activo: {id_p}")
+            st.session_state.db[id_p] = {'lab': [], 'eco': []}
+        st.success(f"Expediente: {id_p}")
 
-# --- CONTENIDO PRINCIPAL ---
 if id_p:
-    pac = st.session_state.db[id_p]
-    tab1, tab2, tab3, tab4 = st.tabs(["📋 FPP & MADRE", "🧪 LABORATORIO", "👶 ECO & DOPPLER", "📈 EVOLUCIÓN"])
+    p = st.session_state.db[id_p]
+    t1, t2, t3, t4 = st.tabs(["📋 FPP", "🧪 LAB COMPLETO", "👶 DOPPLER & PERCENTILES", "📊 EVOLUCIÓN"])
 
-    with tab1:
-        st.subheader("Cronología Gestacional")
-        c1, c2, c3 = st.columns(3)
+    with t1:
+        st.subheader("Datos Maternos")
+        c1, c2 = st.columns(2)
         with c1:
             fum = st.date_input("FUM", datetime.now() - timedelta(weeks=20))
             fpp = fum + timedelta(days=280)
@@ -51,63 +43,70 @@ if id_p:
             st.metric("FPP (Naegele)", fpp.strftime("%d/%m/%Y"))
             st.metric("Edad Gestacional", f"{eg} sem")
         with c2:
-            peso = st.number_input("Peso (kg)", 40.0, 180.0, 70.0)
+            peso = st.number_input("Peso (kg)", 40.0, 150.0, 70.0)
             talla = st.number_input("Talla (cm)", 140, 210, 165) / 100
-            imc = round(peso/(talla**2), 2)
-            st.metric("IMC", imc, delta="Normal" if imc < 25 else "Riesgo")
-        with c3:
-            st.markdown("**Riesgos**")
-            tob = st.number_input("Cigarrillos", 0, 50, 0)
-            alc = st.selectbox("Alcohol", ["No", "Sí"])
+            st.metric("IMC", round(peso/(talla**2), 2))
 
-    with tab2:
-        st.subheader("Perfil de Laboratorio Completo")
-        with st.form("lab_form"):
+    with t2:
+        st.subheader("Análisis de Laboratorio")
+        with st.form("lab_f"):
             l1, l2, l3 = st.columns(3)
             with l1:
-                hb = st.number_input("Hb", 8.0, 16.0, 12.0)
-                glu = st.number_input("Glicemia", 60, 200, 85)
+                st.markdown("**Hematología/Metabólico**")
+                hb = st.number_input("Hb", 8.0, 16.0, 12.0); glu = st.number_input("Glicemia", 60, 250, 85)
+                acur = st.number_input("Ác. Úrico", 1.0, 10.0, 4.0)
             with l2:
-                tsh = st.number_input("TSH", 0.1, 10.0, 1.5)
-                tgo = st.number_input("TGO", 5, 200, 25)
+                st.markdown("**Tiroides/Hígado**")
+                tsh = st.number_input("TSH", 0.1, 8.0, 1.5); tgo = st.number_input("TGO", 5, 200, 25)
                 tgp = st.number_input("TGP", 5, 200, 25)
             with l3:
-                acur = st.number_input("Ácido Úrico", 2.0, 10.0, 4.0)
-                vitd = st.number_input("Vitamina D", 5, 100, 30)
+                st.markdown("**Vitaminas/Otros**")
+                vitd = st.number_input("Vit D", 5, 100, 30); col = st.number_input("Colest.", 100, 400, 190)
+                tri = st.number_input("Triglicéridos", 50, 600, 150)
             if st.form_submit_button("💾 Guardar Lab"):
-                pac['lab'].append({"Fecha": datetime.now(), "EG": eg, "Hb": hb, "TSH": tsh})
-                st.success("Analítica guardada")
+                p['lab'].append({"Fecha": datetime.now(), "EG": eg, "Hb": hb, "TSH": tsh, "Glu": glu})
+                st.success("Laboratorio guardado")
 
-    with tab3:
-        st.subheader("Biometría y Doppler con Percentiles")
-        with st.form("eco_form"):
+    with t3:
+        st.subheader("Evaluación Doppler y Percentiles")
+        with st.form("eco_f"):
             e1, e2 = st.columns(2)
             with e1:
-                st.markdown("**Biometría**")
-                dbo = st.number_input("DBO", 30.0, 115.0, 75.0)
-                ca = st.number_input("CA", 100.0, 450.0, 260.0)
-                lf = st.number_input("LF", 20.0, 100.0, 55.0)
-                cc = st.number_input("CC", 100.0, 450.0, 280.0)
+                st.markdown("**Biometría (mm)**")
+                dbo = st.number_input("DBO", 30.0, 115.0, 75.0); cc = st.number_input("CC", 100.0, 450.0, 280.0)
+                ca = st.number_input("CA", 100.0, 450.0, 260.0); lf = st.number_input("LF", 20.0, 95.0, 55.0)
             with e2:
-                st.markdown("**Doppler**")
+                st.markdown("**IP Doppler**")
                 au = st.number_input("IP Umbilical", 0.4, 2.5, 0.9)
                 acm = st.number_input("IP ACM", 0.6, 3.5, 1.6)
-            if st.form_submit_button("📊 Calcular Percentiles"):
-                # Hadlock IV
+                ut = st.number_input("IP Medio Uterinas", 0.3, 3.0, 0.7)
+            
+            if st.form_submit_button("📊 Procesar Biometría"):
+                # Hadlock IV y Percentiles
                 pfe = round(10**(1.3596 + (0.00061*dbo/10*ca/10) + (0.424*ca/10) + (1.74*lf/10) + (0.0064*cc/10) - (0.00386*ca/10*lf/10)), 1)
-                p_pfe = calcular_percentil(pfe, (eg*110)-1100, 220)
+                icp = round(acm/au, 2)
+                p_pfe = calcular_p(pfe, (eg*110)-1100, 220)
+                p_au = calcular_p(au, 1.1 - (eg*0.01), 0.12)
+                p_acm = calcular_p(acm, 2.3 - (eg*0.02), 0.18)
+                p_icp = calcular_p(icp, 2.2 - (eg*0.02), 0.22)
+                
                 st.divider()
-                st.metric("PFE", f"{pfe}g", f"p{p_pfe}", delta_color=color_estado(p_pfe))
-                pac['eco'].append({"Fecha": datetime.now(), "EG": eg, "PFE": pfe, "p": p_pfe})
-                st.success("Estudio guardado")
+                r1, r2, r3, r4 = st.columns(4)
+                r1.metric("PFE", f"{pfe}g", f"p{p_pfe}")
+                r2.metric("IP Umbilical", au, f"p{p_au}", delta_color="inverse" if p_au > 95 else "normal")
+                r3.metric("IP ACM", acm, f"p{p_acm}")
+                r4.metric("ICP", icp, f"p{p_icp}", delta_color="normal" if icp > 1.08 else "inverse")
+                
+                p['eco'].append({"Fecha": datetime.now(), "EG": eg, "PFE": pfe, "pPFE": p_pfe, "ICP": icp, "pICP": p_icp, "IMAU": ut})
+                st.success("Estudio añadido")
 
-    with tab4:
-        st.subheader("Tendencias")
-        if pac['eco']:
-            df = pd.DataFrame(pac['eco'])
-            st.plotly_chart(px.line(df, x="EG", y="PFE", title="Crecimiento Fetal"), use_container_width=True)
+    with t4:
+        st.subheader("Análisis Longitudinal")
+        if p['eco']:
+            df = pd.DataFrame(p['eco'])
+            st.plotly_chart(px.line(df, x="EG", y="PFE", title="Crecimiento Fetal (g)", markers=True))
+            st.plotly_chart(px.line(df, x="EG", y=["ICP", "IMAU"], title="Evolución Doppler", markers=True))
             st.dataframe(df)
-        else:
-            st.info("No hay datos aún.")
+            st.download_button("📥 Exportar para Publicación (CSV)", df.to_csv().encode('utf-8'), f"Novaes_{id_p}.csv")
 else:
-    st.info("👈 Ingrese ID de paciente.")
+    st.info("👈 Identifique a la paciente para comenzar.")
